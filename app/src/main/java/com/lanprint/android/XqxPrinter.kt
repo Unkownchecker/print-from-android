@@ -3,9 +3,12 @@ package com.lanprint.android
 import android.content.Context
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
+import android.os.SystemClock
+import android.util.Log
 import java.io.File
 
 object XqxPrinter {
+    private const val TAG = "XqxPrinter"
 
     data class PrintOptions(
         val paperSize: String = DEFAULT_PAPER_SIZE,
@@ -43,6 +46,7 @@ object XqxPrinter {
         val outFile = File(workDir, "job-${System.currentTimeMillis()}.out")
 
         try {
+            val rasterStart = SystemClock.elapsedRealtime()
             PdfRasterizer.renderPagesToPbm(
                 pdfPath,
                 pageNumbers,
@@ -51,6 +55,7 @@ object XqxPrinter {
                 options.scalePercent,
                 pbmFile.absolutePath
             )
+            val rasterMs = SystemClock.elapsedRealtime() - rasterStart
 
             // Shared across both protocols -- resolution, geometry, media,
             // copies, tray, and density mean the same thing in both.
@@ -68,6 +73,7 @@ object XqxPrinter {
             )
 
             val model = printer.model
+            val conversionStart = SystemClock.elapsedRealtime()
             val rc: Int
             when (model.protocol) {
                 PrinterProtocol.XQX -> {
@@ -79,14 +85,22 @@ object XqxPrinter {
                     rc = Foo2xqx.nativeConvertZjs(pbmFile.absolutePath, outFile.absolutePath, baseArgs.toTypedArray())
                 }
             }
+            val conversionMs = SystemClock.elapsedRealtime() - conversionStart
             if (rc != 0) return "Raster conversion failed (exit code $rc)."
 
             val outBytes = outFile.readBytes()
             if (outBytes.isEmpty()) return "Raster conversion produced no data."
 
+            val transferStart = SystemClock.elapsedRealtime()
             val ok = usbManager.sendBulkData(printer, outBytes)
+            val transferMs = SystemClock.elapsedRealtime() - transferStart
             if (!ok) return "USB transfer to the printer failed."
 
+            Log.i(
+                TAG,
+                "Printed ${pageNumbers.size} page(s): raster=${rasterMs}ms, " +
+                    "convert=${conversionMs}ms, USB=${transferMs}ms, ${outBytes.size} bytes",
+            )
             return null
         } catch (e: Exception) {
             return e.message ?: "Unknown print error"

@@ -18,8 +18,8 @@ object PdfRasterizer {
     // printer's native 1200x600 dpi). Rendering + dithering a bitmap that
     // size directly (ARGB_8888 = 4 bytes/px) would need ~270MB just for one
     // page and will OutOfMemory on real phones. Instead we render at a
-    // capped, safe intermediate resolution, then nearest-neighbor upsample
-    // row-by-row while dithering straight to the output file -- the target
+    // capped, safe intermediate resolution, then dither at that resolution
+    // and expand the 1-bit rows to the printer's full target grid -- the target
     // pixel grid is still produced at full size, we just never hold the
     // whole thing in memory at once. Quality loss from this is negligible
     // for a monochrome laser printer's actual resolvable detail.
@@ -117,11 +117,10 @@ object PdfRasterizer {
     }
 
     /**
-     * Streams a [targetW]x[targetH] raw-PBM (P4) page from a smaller
-     * [srcW]x[srcH] source bitmap: nearest-neighbor upsamples row by row and
-     * applies Floyd-Steinberg dithering using only two row-sized error
-     * buffers (not a whole-page buffer), so memory use is O(width), not
-     * O(width*height), regardless of how large the target page is.
+     * Dithers the capped intermediate bitmap, expands each 1-bit row once,
+     * and reuses it for the corresponding target rows. This avoids doing
+     * Floyd-Steinberg error diffusion for every printer pixel while keeping
+     * memory use O(width), not O(width*height).
      *
      * PBM (P4) convention: 1 bit per pixel, MSB first, each row padded to a
      * whole byte, BLACK = bit 1, WHITE = bit 0 (verified against libnetpbm's
@@ -139,52 +138,60 @@ object PdfRasterizer {
 
         val rowBytes = (targetW + 7) / 8
         val rowBuf = ByteArray(rowBytes)
+        val sourceRowBuf = ByteArray((srcW + 7) / 8)
 
-        var curErr = FloatArray(targetW)
-        var nextErr = FloatArray(targetW)
+        var curErr = FloatArray(srcW)
+        var nextErr = FloatArray(srcW)
 
         val srcRowPixels = IntArray(srcW)
-        val srcRowLum = FloatArray(srcW)
-        var loadedSrcRow = -1
+        val targetXToSourceX = IntArray(targetW) { x ->
+            (x.toLong() * srcW / targetW).toInt().coerceIn(0, srcW - 1)
+        }
+        var currentSourceY = -1
 
         for (y in 0 until targetH) {
             val sy = (y.toLong() * srcH / targetH).toInt().coerceIn(0, srcH - 1)
-            if (sy != loadedSrcRow) {
-                src.getPixels(srcRowPixels, 0, srcW, 0, sy, srcW, 1)
-                for (sx in 0 until srcW) {
-                    val p = srcRowPixels[sx]
-                    val r = (p shr 16) and 0xFF
-                    val g = (p shr 8) and 0xFF
-                    val b = p and 0xFF
-                    srcRowLum[sx] = 0.299f * r + 0.587f * g + 0.114f * b
-                }
-                loadedSrcRow = sy
-            }
+            while (currentSourceY < sy) {
+                val sourceY = currentSourceY + 1
+                src.getPixels(srcRowPixels, 0, srcW, 0, sourceY, srcW, 1)
+                sourceRowBuf.fill(0)
+                for (x in 0 until srcW) {
+                    val pixel = srcRowPixels[x]
+                    val luminance =
+                        0.299f * ((pixel shr 16) and 0xFF) +
+                            0.587f * ((pixel shr 8) and 0xFF) +
+                            0.114f * (pixel and 0xFF)
+                    val old = luminance + curErr[x]
+                    val isBlack = old < 128f
+                    val error = old - if (isBlack) 0f else 255f
 
-            rowBuf.fill(0)
-            nextErr.fill(0f)
-
-            for (x in 0 until targetW) {
-                val sx = (x.toLong() * srcW / targetW).toInt().coerceIn(0, srcW - 1)
-                val old = srcRowLum[sx] + curErr[x]
-                val isBlack = old < 128f
-                val newVal = if (isBlack) 0f else 255f
-                val err = old - newVal
-
-                if (isBlack) {
-                    rowBuf[x / 8] = (rowBuf[x / 8].toInt() or (0x80 shr (x % 8))).toByte()
+                    if (isBlack) {
+                        sourceRowBuf[x / 8] =
+                            (sourceRowBuf[x / 8].toInt() or (0x80 shr (x % 8))).toByte()
+                    }
+                    if (x + 1 < srcW) curErr[x + 1] += error * 7f / 16f
+                    if (x > 0) nextErr[x - 1] += error * 3f / 16f
+                    nextErr[x] += error * 5f / 16f
+                    if (x + 1 < srcW) nextErr[x + 1] += error * 1f / 16f
                 }
 
-                if (x + 1 < targetW) curErr[x + 1] += err * 7f / 16f
-                if (x > 0) nextErr[x - 1] += err * 3f / 16f
-                nextErr[x] += err * 5f / 16f
-                if (x + 1 < targetW) nextErr[x + 1] += err * 1f / 16f
+                val tmp = curErr
+                curErr = nextErr
+                nextErr = tmp
+                nextErr.fill(0f)
+
+                rowBuf.fill(0)
+                for (x in 0 until targetW) {
+                    val sourceX = targetXToSourceX[x]
+                    if ((sourceRowBuf[sourceX / 8].toInt() and (0x80 shr (sourceX % 8))) != 0) {
+                        rowBuf[x / 8] =
+                            (rowBuf[x / 8].toInt() or (0x80 shr (x % 8))).toByte()
+                    }
+                }
+                currentSourceY = sourceY
             }
 
             out.write(rowBuf)
-            val tmp = curErr
-            curErr = nextErr
-            nextErr = tmp
         }
     }
 }
