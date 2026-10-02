@@ -11,6 +11,7 @@ object XqxPrinter {
         val paperSize: String = DEFAULT_PAPER_SIZE,
         val orientationLandscape: Boolean = false,
         val copies: Int = 1,
+        val scalePercent: Int = 100,
     )
 
     fun pdfPageCount(pdfPath: String): Int {
@@ -43,7 +44,12 @@ object XqxPrinter {
 
         try {
             PdfRasterizer.renderPagesToPbm(
-                pdfPath, pageNumbers, geometry, options.orientationLandscape, pbmFile.absolutePath
+                pdfPath,
+                pageNumbers,
+                geometry,
+                options.orientationLandscape,
+                options.scalePercent,
+                pbmFile.absolutePath
             )
 
             // Shared across both protocols -- resolution, geometry, media,

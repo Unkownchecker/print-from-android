@@ -117,9 +117,14 @@ already covers the "print from any device" need.
 
 ## What this does and doesn't support yet
 
-- **PDF files only.** Non-PDF files (images, Word docs, etc.) get a clear
-  error rather than silently failing — convert to PDF first, same
-  recommendation as the desktop app gives for its own fallback path.
+- **PDF and common image files.** Android-supported JPEG, PNG, GIF, BMP, and
+  WebP images are converted to a one-page PDF for printing. Other document
+  formats (such as Word files) must first be exported to PDF.
+- **Print options:** A4 is the default paper size; the relay print options
+  also accept `orientation: "landscape"`, `scale` or `scalePercent` from 10
+  to 200 (100 fits the page), and `pageRange` such as `"1-3,5"` or `"all"`.
+  `side: "manual"` (or a two-sided/duplex `side` value) starts manual
+  two-sided printing; these printers do not have a hardware duplexer.
 - **One printer at a time** — whichever one is currently plugged in and
   connected.
 - **No hardware duplex.** These printers don't have one over USB. Manual

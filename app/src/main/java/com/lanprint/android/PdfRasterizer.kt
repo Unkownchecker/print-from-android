@@ -3,6 +3,7 @@ package com.lanprint.android
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Matrix
 import android.graphics.Rect
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
@@ -34,6 +35,7 @@ object PdfRasterizer {
         pageNumbers: List<Int>,
         geometry: PaperGeometry,
         orientationLandscape: Boolean,
+        scalePercent: Int,
         outPbmPath: String,
     ) {
         val pfd = ParcelFileDescriptor.open(File(pdfPath), ParcelFileDescriptor.MODE_READ_ONLY)
@@ -59,22 +61,40 @@ object PdfRasterizer {
                         val canvas = Canvas(bitmap)
                         canvas.drawColor(Color.WHITE)
 
-                        val pageRatio = page.width.toFloat() / page.height.toFloat()
-                        val boxRatio = workingW.toFloat() / workingH.toFloat()
-                        val drawW: Int
-                        val drawH: Int
-                        if (pageRatio > boxRatio) {
-                            drawW = workingW
-                            drawH = (workingW / pageRatio).toInt().coerceAtLeast(1)
+                        val rotate = orientationLandscape != (page.width > page.height)
+                        val sourceW = if (rotate) page.height else page.width
+                        val sourceH = if (rotate) page.width else page.height
+                        val fitScale = min(
+                            workingW.toFloat() / sourceW,
+                            workingH.toFloat() / sourceH,
+                        )
+                        val drawScale = fitScale * scalePercent.coerceIn(10, 200) / 100f
+                        val drawW = (sourceW * drawScale).toInt().coerceAtLeast(1)
+                        val drawH = (sourceH * drawScale).toInt().coerceAtLeast(1)
+                        if (rotate) {
+                            val left = (workingW - drawW) / 2f
+                            val top = (workingH - drawH) / 2f
+                            val transform = Matrix().apply {
+                                setValues(
+                                    floatArrayOf(
+                                        0f, -drawScale, page.height * drawScale + left,
+                                        drawScale, 0f, top,
+                                        0f, 0f, 1f,
+                                    )
+                                )
+                            }
+                            page.render(
+                                bitmap,
+                                Rect(0, 0, workingW, workingH),
+                                transform,
+                                PdfRenderer.Page.RENDER_MODE_FOR_PRINT,
+                            )
                         } else {
-                            drawH = workingH
-                            drawW = (workingH * pageRatio).toInt().coerceAtLeast(1)
+                            val left = (workingW - drawW) / 2
+                            val top = (workingH - drawH) / 2
+                            val destRect = Rect(left, top, left + drawW, top + drawH)
+                            page.render(bitmap, destRect, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
                         }
-                        val left = (workingW - drawW) / 2
-                        val top = (workingH - drawH) / 2
-                        val destRect = Rect(left, top, left + drawW, top + drawH)
-
-                        page.render(bitmap, destRect, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
                         writeDitheredPbmPage(out, bitmap, workingW, workingH, targetW, targetH)
                     } finally {
                         bitmap.recycle()

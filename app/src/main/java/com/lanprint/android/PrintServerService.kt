@@ -10,6 +10,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.SharedPreferences
+import android.graphics.BitmapFactory
+import android.graphics.Rect
+import android.graphics.pdf.PdfDocument
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import android.os.Binder
@@ -305,31 +308,52 @@ class PrintServerService : Service(), PrinterBackend {
             )
         }
 
-        if (!filename.lowercase().endsWith(".pdf")) {
-            return PrinterBackend.PrintResult(
-                ok = false,
-                error = "This printer only accepts PDF files right now — convert the file to PDF and try again."
-            )
-        }
-
         val workDir = File(cacheDir, "incoming").apply { mkdirs() }
         val pdfFile = File(workDir, "job-${System.currentTimeMillis()}.pdf")
-        pdfFile.writeBytes(fileBytes)
 
         val printOptions = XqxPrinter.PrintOptions(
             paperSize = options.optString("paperSize", DEFAULT_PAPER_SIZE).let {
                 if (it.isBlank() || it == "default") DEFAULT_PAPER_SIZE else it
             },
-            orientationLandscape = options.optString("orientation") == "landscape",
+            orientationLandscape = options.optString("orientation").equals("landscape", ignoreCase = true) ||
+                options.optBoolean("landscape", false),
             copies = options.optString("copies", "1").toIntOrNull() ?: 1,
+            scalePercent = options.optString("scalePercent", options.optString("scale", "100"))
+                .toIntOrNull()?.coerceIn(10, 200) ?: 100,
         )
 
         try {
-            if (options.optString("side") == "manual") {
-                val start = manualDuplexManager.start(pdfFile.absolutePath, printer.model, printOptions)
-                    ?: return PrinterBackend.PrintResult(ok = false, error = "This file only has one page — nothing to print two-sided.")
+            if (hasPdfSignature(fileBytes)) {
+                pdfFile.writeBytes(fileBytes)
+            } else if (!writeImagePdf(fileBytes, pdfFile, printOptions)) {
+                return PrinterBackend.PrintResult(
+                    ok = false,
+                    error = "Unsupported file. Send a PDF or an image supported by Android (JPEG, PNG, GIF, BMP, or WebP)."
+                )
+            }
 
-                val err = XqxPrinter.printPages(this, usbManager, printer, pdfFile.absolutePath, start.oddPages, printOptions)
+            val pageCount = XqxPrinter.pdfPageCount(pdfFile.absolutePath)
+            val requestedPageRange = options.optString("pageRange", options.optString("pages"))
+            val selectedPages = parsePageRange(requestedPageRange, pageCount)
+                ?: return PrinterBackend.PrintResult(
+                    ok = false,
+                    error = "Invalid page range '$requestedPageRange'. Use values such as 1-3,5."
+                )
+            if (selectedPages.isEmpty()) {
+                return PrinterBackend.PrintResult(ok = false, error = "The selected page range contains no pages.")
+            }
+
+            val hasBothPageSides = selectedPages.any { it % 2 == 1 } && selectedPages.any { it % 2 == 0 }
+            if (isManualDuplexRequested(options) && hasBothPageSides) {
+                val start = manualDuplexManager.start(
+                    pdfFile.absolutePath,
+                    printer.model,
+                    printOptions,
+                    selectedPages,
+                )
+                    ?: return PrinterBackend.PrintResult(ok = false, error = "This print needs at least two pages for manual two-sided printing.")
+                val oddPages = start.oddPages
+                val err = XqxPrinter.printPages(this, usbManager, printer, pdfFile.absolutePath, oddPages, printOptions)
                 if (err != null) {
                     manualDuplexManager.cancel(start.jobId)
                     return PrinterBackend.PrintResult(ok = false, error = err)
@@ -340,12 +364,88 @@ class PrintServerService : Service(), PrinterBackend {
                 )
             }
 
-            val allPages = (1..XqxPrinter.pdfPageCount(pdfFile.absolutePath)).toList()
-            val err = XqxPrinter.printPages(this, usbManager, printer, pdfFile.absolutePath, allPages, printOptions)
+            val err = XqxPrinter.printPages(this, usbManager, printer, pdfFile.absolutePath, selectedPages, printOptions)
             return if (err != null) PrinterBackend.PrintResult(ok = false, error = err)
             else PrinterBackend.PrintResult(ok = true, method = "direct")
         } finally {
             pdfFile.delete()
+        }
+    }
+
+    private fun hasPdfSignature(bytes: ByteArray): Boolean =
+        bytes.size >= 5 && bytes.copyOfRange(0, 5).toString(Charsets.US_ASCII) == "%PDF-"
+
+    private fun parsePageRange(range: String, pageCount: Int): List<Int>? {
+        if (range.isBlank() || range.equals("all", ignoreCase = true)) return (1..pageCount).toList()
+        val pages = mutableListOf<Int>()
+        for (part in range.split(',')) {
+            val token = part.trim()
+            val match = Regex("^(\\d+)(?:\\s*-\\s*(\\d+))?$").matchEntire(token) ?: return null
+            val first = match.groupValues[1].toIntOrNull() ?: return null
+            val last = match.groupValues[2].takeIf { it.isNotEmpty() }?.toIntOrNull() ?: first
+            if (first !in 1..pageCount || last !in 1..pageCount) return null
+            val step = if (first <= last) 1 else -1
+            var page = first
+            while (true) {
+                pages += page
+                if (page == last) break
+                page += step
+            }
+        }
+        return pages
+    }
+
+    private fun isManualDuplexRequested(options: JSONObject): Boolean {
+        val side = options.optString("sides", options.optString("side")).lowercase()
+        return side == "manual" || side.contains("duplex") || side.contains("two-sided") ||
+            side == "long-edge" || side == "short-edge" ||
+            options.optBoolean("duplex", false)
+    }
+
+    private fun writeImagePdf(bytes: ByteArray, output: File, options: XqxPrinter.PrintOptions): Boolean {
+        if (bytes.isEmpty()) return false
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return false
+
+        val largestDimension = maxOf(bounds.outWidth, bounds.outHeight)
+        var sampleSize = 1
+        while (largestDimension / sampleSize > 2400) sampleSize *= 2
+        val bitmap = BitmapFactory.decodeByteArray(
+            bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sampleSize }
+        ) ?: return false
+
+        val geometry = PAPER_SIZES[options.paperSize.lowercase()] ?: PAPER_SIZES[DEFAULT_PAPER_SIZE]!!
+        val portraitWidth = (geometry.widthPx * 72.0 / 1200.0).toInt()
+        val portraitHeight = (geometry.heightPx * 72.0 / 600.0).toInt()
+        val pageWidth = if (options.orientationLandscape) portraitHeight else portraitWidth
+        val pageHeight = if (options.orientationLandscape) portraitWidth else portraitHeight
+        val document = PdfDocument()
+        return try {
+            val page = document.startPage(
+                PdfDocument.PageInfo.Builder(pageWidth, pageHeight, 1).create()
+            )
+            val rotate = options.orientationLandscape != (bitmap.width > bitmap.height)
+            val sourceW = if (rotate) bitmap.height else bitmap.width
+            val sourceH = if (rotate) bitmap.width else bitmap.height
+            val fitScale = minOf(pageWidth.toFloat() / sourceW, pageHeight.toFloat() / sourceH)
+            val drawWidth = (bitmap.width * fitScale).toInt().coerceAtLeast(1)
+            val drawHeight = (bitmap.height * fitScale).toInt().coerceAtLeast(1)
+            val left = (pageWidth - drawWidth) / 2
+            val top = (pageHeight - drawHeight) / 2
+            page.canvas.drawColor(android.graphics.Color.WHITE)
+            if (rotate) {
+                page.canvas.save()
+                page.canvas.rotate(90f, pageWidth / 2f, pageHeight / 2f)
+            }
+            page.canvas.drawBitmap(bitmap, null, Rect(left, top, left + drawWidth, top + drawHeight), null)
+            if (rotate) page.canvas.restore()
+            document.finishPage(page)
+            output.outputStream().use { document.writeTo(it) }
+            true
+        } finally {
+            document.close()
+            bitmap.recycle()
         }
     }
 
@@ -355,7 +455,7 @@ class PrintServerService : Service(), PrinterBackend {
         val printer = connectedPrinter
             ?: return PrinterBackend.PrintResult(ok = false, error = "No printer connected to this device.")
 
-        val even = manualDuplexManager.evenPages(job.totalPages, reverseEven)
+        val even = manualDuplexManager.evenPages(job.selectedPages, reverseEven)
         val err = XqxPrinter.printPages(this, usbManager, printer, job.pdfPath, even, job.options)
         manualDuplexManager.finish(jobId)
         return if (err != null) PrinterBackend.PrintResult(ok = false, error = err)

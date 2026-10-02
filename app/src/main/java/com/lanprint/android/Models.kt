@@ -87,10 +87,10 @@ data class PaperGeometry(
 )
 
 val PAPER_SIZES: Map<String, PaperGeometry> = mapOf(
+    "a4" to PaperGeometry(9920, 7016, 176, 84, 176, 84, 9),
     "letter" to PaperGeometry(10200, 6600, 177, 84, 177, 84, 1),
     "legal" to PaperGeometry(10200, 8400, 177, 96, 177, 96, 5),
-    "a4" to PaperGeometry(9920, 7016, 176, 84, 176, 84, 9),
     "a5" to PaperGeometry(6992, 4960, 192, 96, 192, 96, 11),
 )
 
-const val DEFAULT_PAPER_SIZE = "letter"
+const val DEFAULT_PAPER_SIZE = "a4"

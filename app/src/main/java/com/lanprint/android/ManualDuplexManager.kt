@@ -21,6 +21,7 @@ class ManualDuplexManager(private val context: Context) {
         val printerModel: PrinterModel,
         val options: XqxPrinter.PrintOptions,
         val totalPages: Int,
+        val selectedPages: List<Int>,
         val expiryRunnable: Runnable,
     )
 
@@ -39,16 +40,21 @@ class ManualDuplexManager(private val context: Context) {
         val oddPages: List<Int>,
     )
 
-    fun oddPages(total: Int): List<Int> = (1..total step 2).toList()
-    fun evenPages(total: Int, reverse: Boolean): List<Int> {
-        val list = (2..total step 2).toList()
+    fun evenPages(pages: List<Int>, reverse: Boolean): List<Int> {
+        val list = pages.filter { it % 2 == 0 }
         return if (reverse) list.reversed() else list
     }
 
     /** Copies [sourcePdfPath] into app storage (so it survives past this call) and returns job info. */
-    fun start(sourcePdfPath: String, printerModel: PrinterModel, options: XqxPrinter.PrintOptions): StartResult? {
-        val totalPages = XqxPrinter.pdfPageCount(sourcePdfPath)
-        if (totalPages < 2) return null
+    fun start(
+        sourcePdfPath: String,
+        printerModel: PrinterModel,
+        options: XqxPrinter.PrintOptions,
+        pageNumbers: List<Int>? = null,
+    ): StartResult? {
+        val documentPageCount = XqxPrinter.pdfPageCount(sourcePdfPath)
+        val selectedPages = pageNumbers ?: (1..documentPageCount).toList()
+        if (selectedPages.size < 2 || selectedPages.any { it !in 1..documentPageCount }) return null
 
         val jobId = UUID.randomUUID().toString()
         val workDir = File(context.cacheDir, "manual-duplex").apply { mkdirs() }
@@ -58,10 +64,11 @@ class ManualDuplexManager(private val context: Context) {
         val expiryRunnable = Runnable { cancel(jobId) }
         handler.postDelayed(expiryRunnable, JOB_EXPIRY_MS)
 
-        jobs[jobId] = Job(storedPdf.absolutePath, printerModel, options, totalPages, expiryRunnable)
+        jobs[jobId] = Job(storedPdf.absolutePath, printerModel, options, selectedPages.size, selectedPages, expiryRunnable)
 
-        val odd = oddPages(totalPages)
-        return StartResult(jobId, totalPages, odd.size, totalPages - odd.size, odd)
+        val odd = selectedPages.filter { it % 2 == 1 }
+        val even = selectedPages.filter { it % 2 == 0 }
+        return StartResult(jobId, selectedPages.size, odd.size, even.size, odd)
     }
 
     fun get(jobId: String): Job? = jobs[jobId]
