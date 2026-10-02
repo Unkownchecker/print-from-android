@@ -20,6 +20,9 @@ class UsbPrinterManager(private val context: Context) {
         private const val ACTION_USB_PERMISSION = "com.lanprint.android.USB_PERMISSION"
         private const val CONTROL_TIMEOUT_MS = 3000
         private const val BULK_TIMEOUT_MS = 15000
+        private const val FIRMWARE_SETTLE_DELAY_MS = 3000L
+        private const val DEVICE_ID_RETRY_DELAY_MS = 1000L
+        private const val DEVICE_ID_RETRIES = 5
 
         // USB Printer Class Specification 1.1, section 4.2.1 GET_DEVICE_ID:
         // bmRequestType=0xA1 (IN | Class | Interface), bRequest=0,
@@ -184,10 +187,29 @@ class UsbPrinterManager(private val context: Context) {
 
     fun sendFirmware(printer: ConnectedPrinter, firmwareBytes: ByteArray): FirmwareSendResult {
         val bytesTransferred = transferBytes(printer, firmwareBytes)
-        val deviceId = if (bytesTransferred == firmwareBytes.size && firmwareBytes.isNotEmpty()) {
-            readDeviceIdString(printer.connection, printer.usbInterface)
-        } else {
-            null
+        if (bytesTransferred != firmwareBytes.size || firmwareBytes.isEmpty()) {
+            return FirmwareSendResult(bytesTransferred, firmwareBytes.size, null)
+        }
+
+        try {
+            Thread.sleep(FIRMWARE_SETTLE_DELAY_MS)
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+            return FirmwareSendResult(bytesTransferred, firmwareBytes.size, null)
+        }
+
+        var deviceId: String? = null
+        for (attempt in 0 until DEVICE_ID_RETRIES) {
+            deviceId = readDeviceIdString(printer.connection, printer.usbInterface)
+            if (deviceId?.contains("FWVER:", ignoreCase = true) == true) break
+            if (attempt < DEVICE_ID_RETRIES - 1) {
+                try {
+                    Thread.sleep(DEVICE_ID_RETRY_DELAY_MS)
+                } catch (e: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    return FirmwareSendResult(bytesTransferred, firmwareBytes.size, deviceId)
+                }
+            }
         }
         return FirmwareSendResult(bytesTransferred, firmwareBytes.size, deviceId)
     }

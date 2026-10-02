@@ -25,6 +25,8 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -50,21 +52,25 @@ class MainActivity : AppCompatActivity() {
             if (bytes == null) {
                 Toast.makeText(this, "Couldn't read that file", Toast.LENGTH_LONG).show()
             } else {
-                val error = service?.installFirmwareFile(bytes)
-                if (error == null) {
-                    Toast.makeText(
-                        this,
-                        "Printer reports firmware is active",
-                        Toast.LENGTH_LONG
-                    ).show()
-                } else {
-                    Toast.makeText(this, error, Toast.LENGTH_LONG).show()
+                mainScope.launch {
+                    val error = withContext(Dispatchers.IO) {
+                        service?.installFirmwareFile(bytes)
+                    }
+                    if (error == null) {
+                        Toast.makeText(
+                            this@MainActivity,
+                            "Printer reports firmware is active",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    } else {
+                        Toast.makeText(this@MainActivity, error, Toast.LENGTH_LONG).show()
+                    }
+                    refreshFirmwareStatus()
                 }
             }
         } catch (e: Exception) {
             Toast.makeText(this, "Couldn't read that file: ${e.message}", Toast.LENGTH_LONG).show()
         }
-        refreshFirmwareStatus()
     }
 
     private val connection = object : ServiceConnection {

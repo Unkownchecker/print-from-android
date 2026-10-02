@@ -136,6 +136,16 @@ class PrintServerService : Service(), PrinterBackend {
             return firmwareStatus
         }
         val firmwareBytes = fw.readBytes()
+        firmwareStatus = "Waiting for printer to become ready before firmware upload"
+        onUsbStatusUpdate?.invoke("Connected: ${printer.model.displayName} — $firmwareStatus")
+        try {
+            Thread.sleep(3000)
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+            firmwareStatus = "Firmware upload cancelled while waiting for printer"
+            onUsbStatusUpdate?.invoke("Connected: ${printer.model.displayName} — $firmwareStatus")
+            return firmwareStatus
+        }
         val result = usbManager.sendFirmware(printer, firmwareBytes)
         if (!result.transferComplete) {
             firmwareSentThisConnection = false
@@ -267,7 +277,9 @@ class PrintServerService : Service(), PrinterBackend {
             firmwareStatus = "Firmware has not been checked for this connection"
             onUsbStatusUpdate?.invoke("Connected: ${printer.model.displayName}")
             updateNotification()
-            sendFirmwareIfNeeded(printer)
+            scope.launch {
+                if (connectedPrinter === printer) sendFirmwareIfNeeded(printer)
+            }
         }
     }
 
