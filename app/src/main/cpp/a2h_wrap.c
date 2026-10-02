@@ -74,6 +74,10 @@ static int a2h_getopt(int argc, char *const argv[], const char *optstring)
 #define optarg a2h_optarg
 #define optind a2h_optind
 #define main arm2hpdl_main
+#define Debug a2h_Debug
+#define debug a2h_debug
+#define error a2h_error
+#define usage a2h_usage
 /* arm2hpdl.c calls bare printf() for its PJL header/footer -- printf()
  * always targets the process's real stdout regardless of our `stdout`
  * macro (that macro only affects explicit fprintf(stdout,...)/fwrite(...,
