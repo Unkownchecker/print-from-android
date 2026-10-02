@@ -52,7 +52,11 @@ class MainActivity : AppCompatActivity() {
             } else {
                 val error = service?.installFirmwareFile(bytes)
                 if (error == null) {
-                    Toast.makeText(this, "Firmware loaded and sent", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        this,
+                        "Firmware data transferred; printer acceptance is unconfirmed",
+                        Toast.LENGTH_LONG
+                    ).show()
                 } else {
                     Toast.makeText(this, error, Toast.LENGTH_LONG).show()
                 }

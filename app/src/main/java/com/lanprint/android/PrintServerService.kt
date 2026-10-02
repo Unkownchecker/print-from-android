@@ -76,7 +76,7 @@ class PrintServerService : Service(), PrinterBackend {
         val fw = firmwareFile(printer.model)
         return when {
             !fw.exists() -> "No firmware file loaded for ${printer.model.firmwareModelName} (see README)"
-            firmwareSentThisConnection -> "Firmware sent for this connection"
+            firmwareSentThisConnection -> "Firmware data transferred; printer acceptance unconfirmed"
             else -> "Firmware file ready, will send on next connect"
         }
     }
@@ -111,26 +111,31 @@ class PrintServerService : Service(), PrinterBackend {
             return "Firmware conversion failed (exit code $rc) — is this the right file for ${model.firmwareModelName}?"
         }
 
+        val printer = connectedPrinter
+            ?: return "Firmware was converted, but the printer disconnected before it could be sent."
         firmwareSentThisConnection = false
-        connectedPrinter?.let { sendFirmwareIfNeeded(it) }
+        if (!sendFirmwareIfNeeded(printer)) {
+            return "Firmware was converted, but the USB transfer failed. Check the OTG connection and printer, then try again."
+        }
         return null
     }
 
-    private fun sendFirmwareIfNeeded(printer: UsbPrinterManager.ConnectedPrinter) {
-        if (firmwareSentThisConnection) return
+    private fun sendFirmwareIfNeeded(printer: UsbPrinterManager.ConnectedPrinter): Boolean {
+        if (firmwareSentThisConnection) return true
         val fw = firmwareFile(printer.model)
         if (!fw.exists()) {
             onUsbStatusUpdate?.invoke(
                 "Connected: ${printer.model.displayName} — no firmware loaded yet, printing will likely fail until you load one (see README)"
             )
-            return
+            return false
         }
         val ok = usbManager.sendFirmware(printer, fw.readBytes())
         firmwareSentThisConnection = ok
         onUsbStatusUpdate?.invoke(
-            if (ok) "Connected: ${printer.model.displayName} (firmware sent)"
+            if (ok) "Connected: ${printer.model.displayName} (firmware data transferred; printer acceptance unconfirmed)"
             else "Connected: ${printer.model.displayName} — firmware upload failed, try reconnecting"
         )
+        return ok
     }
 
     fun setRelayUrl(url: String) {
