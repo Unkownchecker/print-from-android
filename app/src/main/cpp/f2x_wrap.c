@@ -91,6 +91,71 @@ static int f2x_getopt(int argc, char *const argv[], const char *optstring)
 #define debug  f2x_debug
 #define usage  f2x_usage
 
+/* The upstream XQX and ZJ programs define many of the same global symbols.
+ * Prefix this copy so both converters can live in the same shared library. */
+#define Debug              f2x_Debug
+#define Version            f2x_Version
+#define AllIsBlack          f2x_AllIsBlack
+#define AnyColor            f2x_AnyColor
+#define BlackClears         f2x_BlackClears
+#define Bpp                 f2x_Bpp
+#define Copies              f2x_Copies
+#define Duplex              f2x_Duplex
+#define EconoMode           f2x_EconoMode
+#define EvenPages           f2x_EvenPages
+#define ExtraPad            f2x_ExtraPad
+#define Filename            f2x_Filename
+#define IsCUPS              f2x_IsCUPS
+#define LogicalOffsetX      f2x_LogicalOffsetX
+#define LogicalOffsetY      f2x_LogicalOffsetY
+#define LowerRightX         f2x_LowerRightX
+#define LowerRightY         f2x_LowerRightY
+#define MediaCode           f2x_MediaCode
+#define Mode                f2x_Mode
+#define OutputStartPlane    f2x_OutputStartPlane
+#define PageHeight          f2x_PageHeight
+#define PageNum             f2x_PageNum
+#define PageWidth           f2x_PageWidth
+#define PaperCode           f2x_PaperCode
+#define PrintDensity        f2x_PrintDensity
+#define ResX                f2x_ResX
+#define ResY                f2x_ResY
+#define SaveToner           f2x_SaveToner
+#define SeekIndex           f2x_SeekIndex
+#define SeekRec             f2x_SeekRec
+#define SourceCode          f2x_SourceCode
+#define UpperLeftX          f2x_UpperLeftX
+#define UpperLeftY          f2x_UpperLeftY
+#define Username            f2x_Username
+#define BIE_CHAIN           f2x_BIE_CHAIN
+#define SEEKREC             f2x_SEEKREC
+
+#define blank_page          f2x_blank_page
+#define chunk_write         f2x_chunk_write
+#define cmyk_page           f2x_cmyk_page
+#define cmyk_pages          f2x_cmyk_pages
+#define cmyk_planes         f2x_cmyk_planes
+#define do_one              f2x_do_one
+#define end_doc             f2x_end_doc
+#define end_page            f2x_end_page
+#define free_chain          f2x_free_chain
+#define getint              f2x_getint
+#define item_uint32_write   f2x_item_uint32_write
+#define output_jbig         f2x_output_jbig
+#define parse_xy            f2x_parse_xy
+#define pbm_header          f2x_pbm_header
+#define pbm_page            f2x_pbm_page
+#define pbm_pages           f2x_pbm_pages
+#define pksm_page           f2x_pksm_page
+#define pksm_pages          f2x_pksm_pages
+#define read_and_clip_image f2x_read_and_clip_image
+#define rotate_bytes_180    f2x_rotate_bytes_180
+#define skip_to_nl          f2x_skip_to_nl
+#define start_doc           f2x_start_doc
+#define start_page          f2x_start_page
+#define write_page          f2x_write_page
+#define write_plane         f2x_write_plane
+
 #include "foo2zjs/foo2xqx.c"
 
 /* Put every option/global back to its compile-time default. */

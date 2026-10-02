@@ -81,6 +81,71 @@ static int fzj_getopt(int argc, char *const argv[], const char *optstring)
 #define debug  fzj_debug
 #define usage  fzj_usage
 
+/* The upstream XQX and ZJ programs define many of the same global symbols.
+ * Prefix this copy so both converters can live in the same shared library. */
+#define Debug              fzj_Debug
+#define Version            fzj_Version
+#define AllIsBlack          fzj_AllIsBlack
+#define AnyColor            fzj_AnyColor
+#define BlackClears         fzj_BlackClears
+#define Bpp                 fzj_Bpp
+#define Copies              fzj_Copies
+#define Duplex              fzj_Duplex
+#define EconoMode           fzj_EconoMode
+#define EvenPages           fzj_EvenPages
+#define ExtraPad            fzj_ExtraPad
+#define Filename            fzj_Filename
+#define IsCUPS              fzj_IsCUPS
+#define LogicalOffsetX      fzj_LogicalOffsetX
+#define LogicalOffsetY      fzj_LogicalOffsetY
+#define LowerRightX         fzj_LowerRightX
+#define LowerRightY         fzj_LowerRightY
+#define MediaCode           fzj_MediaCode
+#define Mode                fzj_Mode
+#define OutputStartPlane    fzj_OutputStartPlane
+#define PageHeight          fzj_PageHeight
+#define PageNum             fzj_PageNum
+#define PageWidth           fzj_PageWidth
+#define PaperCode           fzj_PaperCode
+#define PrintDensity        fzj_PrintDensity
+#define ResX                fzj_ResX
+#define ResY                fzj_ResY
+#define SaveToner           fzj_SaveToner
+#define SeekIndex           fzj_SeekIndex
+#define SeekRec             fzj_SeekRec
+#define SourceCode          fzj_SourceCode
+#define UpperLeftX          fzj_UpperLeftX
+#define UpperLeftY          fzj_UpperLeftY
+#define Username            fzj_Username
+#define BIE_CHAIN           fzj_BIE_CHAIN
+#define SEEKREC             fzj_SEEKREC
+
+#define blank_page          fzj_blank_page
+#define chunk_write         fzj_chunk_write
+#define cmyk_page           fzj_cmyk_page
+#define cmyk_pages          fzj_cmyk_pages
+#define cmyk_planes         fzj_cmyk_planes
+#define do_one              fzj_do_one
+#define end_doc             fzj_end_doc
+#define end_page            fzj_end_page
+#define free_chain          fzj_free_chain
+#define getint              fzj_getint
+#define item_uint32_write   fzj_item_uint32_write
+#define output_jbig         fzj_output_jbig
+#define parse_xy            fzj_parse_xy
+#define pbm_header          fzj_pbm_header
+#define pbm_page            fzj_pbm_page
+#define pbm_pages           fzj_pbm_pages
+#define pksm_page           fzj_pksm_page
+#define pksm_pages          fzj_pksm_pages
+#define read_and_clip_image fzj_read_and_clip_image
+#define rotate_bytes_180    fzj_rotate_bytes_180
+#define skip_to_nl          fzj_skip_to_nl
+#define start_doc           fzj_start_doc
+#define start_page          fzj_start_page
+#define write_page          fzj_write_page
+#define write_plane         fzj_write_plane
+
 #include "foo2zjs/foo2zjs.c"
 
 static void fzj_reset(void)
