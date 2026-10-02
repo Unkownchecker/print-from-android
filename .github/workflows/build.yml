@@ -2,7 +2,7 @@ name: Build APK
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
   workflow_dispatch: {}
 
 jobs:
@@ -19,11 +19,11 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
-
-      - name: Install NDK and CMake
-        run: |
-          yes | sdkmanager --licenses || true
-          sdkmanager "ndk;26.1.10909125" "cmake;3.22.1"
+        with:
+          api-level: 34
+          build-tools: 34.0.0
+          cmake: 3.22.1
+          ndk: 26.1.10909125
 
       # No gradle-wrapper.jar is committed to the repo -- it's a binary file
       # that's awkward to hand-author correctly, so we generate it fresh
