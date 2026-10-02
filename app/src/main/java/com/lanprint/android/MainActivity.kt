@@ -54,7 +54,7 @@ class MainActivity : AppCompatActivity() {
                 if (error == null) {
                     Toast.makeText(
                         this,
-                        "Firmware data transferred; printer acceptance is unconfirmed",
+                        "Printer reports firmware is active",
                         Toast.LENGTH_LONG
                     ).show()
                 } else {

@@ -23,7 +23,7 @@ class UsbPrinterManager(private val context: Context) {
 
         // USB Printer Class Specification 1.1, section 4.2.1 GET_DEVICE_ID:
         // bmRequestType=0xA1 (IN | Class | Interface), bRequest=0,
-        // wValue=configuration index, wIndex=(interface index << 8) | altSetting.
+        // wValue=0, wIndex=the printer interface number.
         // Response: 2-byte big-endian length (INCLUDING those 2 bytes) followed
         // by the ASCII IEEE-1284 device ID string.
         private const val GET_DEVICE_ID_REQUEST_TYPE = 0xA1
@@ -127,9 +127,14 @@ class UsbPrinterManager(private val context: Context) {
 
     private fun readDeviceIdString(connection: UsbDeviceConnection, iface: UsbInterface): String? {
         val buffer = ByteArray(1024)
-        val wIndex = (iface.id shl 8) or 0
         val read = connection.controlTransfer(
-            GET_DEVICE_ID_REQUEST_TYPE, GET_DEVICE_ID_BREQUEST, 0, wIndex, buffer, buffer.size, CONTROL_TIMEOUT_MS
+            GET_DEVICE_ID_REQUEST_TYPE,
+            GET_DEVICE_ID_BREQUEST,
+            0,
+            iface.id,
+            buffer,
+            buffer.size,
+            CONTROL_TIMEOUT_MS
         )
         if (read < 2) return null
         val declaredLen = ((buffer[0].toInt() and 0xFF) shl 8) or (buffer[1].toInt() and 0xFF)
@@ -140,16 +145,19 @@ class UsbPrinterManager(private val context: Context) {
     /** Sends [data] to the printer's bulk OUT endpoint, chunked to a safe transfer size. */
     fun sendBulkData(printer: ConnectedPrinter, data: ByteArray): Boolean {
         if (data.isEmpty()) return false
+        return transferBytes(printer, data) == data.size
+    }
 
+    private fun transferBytes(printer: ConnectedPrinter, data: ByteArray): Int {
         val chunkSize = 16384
         var offset = 0
         while (offset < data.size) {
             val len = minOf(chunkSize, data.size - offset)
             val sent = printer.connection.bulkTransfer(printer.outEndpoint, data, offset, len, BULK_TIMEOUT_MS)
-            if (sent <= 0) return false
+            if (sent <= 0) return offset
             offset += sent
         }
-        return true
+        return offset
     }
 
     /**
@@ -162,8 +170,27 @@ class UsbPrinterManager(private val context: Context) {
      * not something covered by foo2zjs's own GPL license -- see the
      * README for how to obtain it yourself.
      */
-    fun sendFirmware(printer: ConnectedPrinter, firmwareBytes: ByteArray): Boolean =
-        sendBulkData(printer, firmwareBytes)
+    data class FirmwareSendResult(
+        val bytesTransferred: Int,
+        val expectedBytes: Int,
+        val printerDeviceId: String?,
+    ) {
+        val transferComplete: Boolean
+            get() = expectedBytes > 0 && bytesTransferred == expectedBytes
+
+        val firmwareReported: Boolean
+            get() = printerDeviceId?.contains("FWVER:", ignoreCase = true) == true
+    }
+
+    fun sendFirmware(printer: ConnectedPrinter, firmwareBytes: ByteArray): FirmwareSendResult {
+        val bytesTransferred = transferBytes(printer, firmwareBytes)
+        val deviceId = if (bytesTransferred == firmwareBytes.size && firmwareBytes.isNotEmpty()) {
+            readDeviceIdString(printer.connection, printer.usbInterface)
+        } else {
+            null
+        }
+        return FirmwareSendResult(bytesTransferred, firmwareBytes.size, deviceId)
+    }
 
     fun disconnect(printer: ConnectedPrinter) {
         try {

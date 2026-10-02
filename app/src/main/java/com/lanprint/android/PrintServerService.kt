@@ -55,6 +55,8 @@ class PrintServerService : Service(), PrinterBackend {
     private var connectionStatus = "unconfigured"
     private var nextReconnectAt = 0L
     private var firmwareSentThisConnection = false
+    private var firmwareStatus = "Firmware has not been checked for this connection"
+    private var firmwareDeviceId: String? = null
     private val recentJobs = mutableListOf<JobEntry>()
 
     data class JobEntry(val name: String, val printer: String, val ok: Boolean, val time: Long)
@@ -76,8 +78,8 @@ class PrintServerService : Service(), PrinterBackend {
         val fw = firmwareFile(printer.model)
         return when {
             !fw.exists() -> "No firmware file loaded for ${printer.model.firmwareModelName} (see README)"
-            firmwareSentThisConnection -> "Firmware data transferred; printer acceptance unconfirmed"
-            else -> "Firmware file ready, will send on next connect"
+            firmwareSentThisConnection -> "Firmware active: ${firmwareDeviceId ?: "printer reported FWVER"}"
+            else -> firmwareStatus
         }
     }
 
@@ -114,28 +116,47 @@ class PrintServerService : Service(), PrinterBackend {
         val printer = connectedPrinter
             ?: return "Firmware was converted, but the printer disconnected before it could be sent."
         firmwareSentThisConnection = false
-        if (!sendFirmwareIfNeeded(printer)) {
-            return "Firmware was converted, but the USB transfer failed. Check the OTG connection and printer, then try again."
-        }
-        return null
+        firmwareStatus = "Firmware converted; checking printer response"
+        return sendFirmwareIfNeeded(printer)
     }
 
-    private fun sendFirmwareIfNeeded(printer: UsbPrinterManager.ConnectedPrinter): Boolean {
-        if (firmwareSentThisConnection) return true
+    private fun sendFirmwareIfNeeded(printer: UsbPrinterManager.ConnectedPrinter): String? {
+        if (firmwareSentThisConnection) return null
+        if (printer.deviceIdString.contains("FWVER:", ignoreCase = true)) {
+            firmwareSentThisConnection = true
+            firmwareDeviceId = printer.deviceIdString
+            firmwareStatus = "Firmware active: ${printer.deviceIdString}"
+            onUsbStatusUpdate?.invoke("Connected: ${printer.model.displayName} — $firmwareStatus")
+            return null
+        }
         val fw = firmwareFile(printer.model)
         if (!fw.exists()) {
-            onUsbStatusUpdate?.invoke(
-                "Connected: ${printer.model.displayName} — no firmware loaded yet, printing will likely fail until you load one (see README)"
-            )
-            return false
+            firmwareStatus = "No firmware loaded; load ${printer.model.firmwareModelName} firmware"
+            onUsbStatusUpdate?.invoke("Connected: ${printer.model.displayName} — $firmwareStatus (see README)")
+            return firmwareStatus
         }
-        val ok = usbManager.sendFirmware(printer, fw.readBytes())
-        firmwareSentThisConnection = ok
-        onUsbStatusUpdate?.invoke(
-            if (ok) "Connected: ${printer.model.displayName} (firmware data transferred; printer acceptance unconfirmed)"
-            else "Connected: ${printer.model.displayName} — firmware upload failed, try reconnecting"
-        )
-        return ok
+        val firmwareBytes = fw.readBytes()
+        val result = usbManager.sendFirmware(printer, firmwareBytes)
+        if (!result.transferComplete) {
+            firmwareSentThisConnection = false
+            firmwareStatus = "Firmware transfer stopped at ${result.bytesTransferred}/${result.expectedBytes} bytes"
+            onUsbStatusUpdate?.invoke("Connected: ${printer.model.displayName} — $firmwareStatus")
+            return firmwareStatus
+        }
+        if (!result.firmwareReported) {
+            firmwareSentThisConnection = false
+            val response = result.printerDeviceId ?: "no device ID response"
+            firmwareDeviceId = result.printerDeviceId
+            firmwareStatus = "Sent ${result.bytesTransferred} bytes, but printer did not report FWVER. Device ID: $response"
+            onUsbStatusUpdate?.invoke("Connected: ${printer.model.displayName} — $firmwareStatus")
+            return firmwareStatus
+        }
+
+        firmwareSentThisConnection = true
+        firmwareDeviceId = result.printerDeviceId
+        firmwareStatus = "Firmware active: ${result.printerDeviceId}"
+        onUsbStatusUpdate?.invoke("Connected: ${printer.model.displayName} — $firmwareStatus")
+        return null
     }
 
     fun setRelayUrl(url: String) {
@@ -242,6 +263,8 @@ class PrintServerService : Service(), PrinterBackend {
             connectedPrinter?.let { usbManager.disconnect(it) }
             connectedPrinter = printer
             firmwareSentThisConnection = false
+            firmwareDeviceId = null
+            firmwareStatus = "Firmware has not been checked for this connection"
             onUsbStatusUpdate?.invoke("Connected: ${printer.model.displayName}")
             updateNotification()
             sendFirmwareIfNeeded(printer)
