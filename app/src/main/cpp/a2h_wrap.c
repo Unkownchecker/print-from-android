@@ -83,6 +83,9 @@ static int a2h_getopt(int argc, char *const argv[], const char *optstring)
  * macro (that macro only affects explicit fprintf(stdout,...)/fwrite(...,
  * stdout) calls), so it must be redirected separately. */
 #define printf(...) fprintf(a2h_out, __VA_ARGS__)
+/* arm2hpdl emits the ELF checksum trailer with putchar(), which also needs
+ * to go to the converted firmware file rather than the process's stdout. */
+#define putchar(c) fputc((c), a2h_out)
 
 #include "foo2zjs/arm2hpdl.c"
 
