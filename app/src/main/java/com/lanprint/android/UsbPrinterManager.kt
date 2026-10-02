@@ -26,8 +26,7 @@ class UsbPrinterManager(private val context: Context) {
         // wValue=configuration index, wIndex=(interface index << 8) | altSetting.
         // Response: 2-byte big-endian length (INCLUDING those 2 bytes) followed
         // by the ASCII IEEE-1284 device ID string.
-        private const val GET_DEVICE_ID_REQUEST_TYPE =
-            UsbConstants.USB_DIR_IN or UsbConstants.USB_TYPE_CLASS or UsbConstants.USB_RECIP_INTERFACE
+        private const val GET_DEVICE_ID_REQUEST_TYPE = 0xA1
         private const val GET_DEVICE_ID_BREQUEST = 0
     }
 
