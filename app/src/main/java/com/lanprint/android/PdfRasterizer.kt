@@ -45,10 +45,14 @@ object PdfRasterizer {
 
         val targetW = if (orientationLandscape) geometry.heightPx else geometry.widthPx
         val targetH = if (orientationLandscape) geometry.widthPx else geometry.heightPx
+        val horizontalDpi = if (orientationLandscape) 600f else 1200f
+        val verticalDpi = if (orientationLandscape) 1200f else 600f
 
         val scale = min(1.0, MAX_INTERMEDIATE_DIM.toDouble() / max(targetW, targetH))
         val workingW = max(1, (targetW * scale).toInt())
         val workingH = max(1, (targetH * scale).toInt())
+        val intermediateScaleX = workingW.toFloat() / targetW
+        val intermediateScaleY = workingH.toFloat() / targetH
 
         try {
             for (pageNum in pageNumbers) {
@@ -65,20 +69,22 @@ object PdfRasterizer {
                         val sourceW = if (rotate) page.height else page.width
                         val sourceH = if (rotate) page.width else page.height
                         val fitScale = min(
-                            workingW.toFloat() / sourceW,
-                            workingH.toFloat() / sourceH,
+                            targetW * 72f / (horizontalDpi * sourceW),
+                            targetH * 72f / (verticalDpi * sourceH),
                         )
-                        val drawScale = fitScale * scalePercent.coerceIn(10, 200) / 100f
-                        val drawW = (sourceW * drawScale).toInt().coerceAtLeast(1)
-                        val drawH = (sourceH * drawScale).toInt().coerceAtLeast(1)
+                        val scaleFactor = fitScale * scalePercent.coerceIn(10, 200) / 100f
+                        val scaleX = scaleFactor * horizontalDpi / 72f * intermediateScaleX
+                        val scaleY = scaleFactor * verticalDpi / 72f * intermediateScaleY
+                        val drawW = (sourceW * scaleX).toInt().coerceAtLeast(1)
+                        val drawH = (sourceH * scaleY).toInt().coerceAtLeast(1)
                         if (rotate) {
                             val left = (workingW - drawW) / 2f
                             val top = (workingH - drawH) / 2f
                             val transform = Matrix().apply {
                                 setValues(
                                     floatArrayOf(
-                                        0f, -drawScale, page.height * drawScale + left,
-                                        drawScale, 0f, top,
+                                        0f, -scaleX, page.height * scaleX + left,
+                                        scaleY, 0f, top,
                                         0f, 0f, 1f,
                                     )
                                 )
