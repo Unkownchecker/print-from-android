@@ -141,12 +141,22 @@ class PrintServerService : Service(), PrinterBackend {
         return sendFirmwareIfNeeded(printer)
     }
 
-    private fun isHpDownloadFile(bytes: ByteArray): Boolean =
-        bytes.size >= 4 &&
-            (bytes[0].toInt() and 0xFF) == 0xBE &&
-            (bytes[1].toInt() and 0xFF) == 0xEF &&
-            (bytes[2].toInt() and 0xFF) == 0x41 &&
-            (bytes[3].toInt() and 0xFF) == 0x42
+    private fun isHpDownloadFile(bytes: ByteArray): Boolean {
+        val binaryHeader = byteArrayOf(0xBE.toByte(), 0xEF.toByte(), 0x41, 0x42)
+        if (bytes.startsWithBytes(binaryHeader)) return true
+
+        // arm2hpdl emits this PJL/ACL form for firmware images prefixed with
+        // a date (such as the supplied hp1020.img), rather than the binary
+        // BE EF 41 42 header it emits for a bare ELF image.
+        val pjlHeader = "\u001B%-12345X@PJL ENTER LANGUAGE=ACL\r\n".toByteArray(Charsets.US_ASCII)
+        val aclHeader = byteArrayOf(0x00, 0xAC.toByte(), 0xC0.toByte(), 0xDE.toByte())
+        return bytes.startsWithBytes(pjlHeader) &&
+            bytes.copyOfRange(pjlHeader.size, minOf(bytes.size, pjlHeader.size + aclHeader.size))
+                .contentEquals(aclHeader)
+    }
+
+    private fun ByteArray.startsWithBytes(prefix: ByteArray): Boolean =
+        size >= prefix.size && copyOfRange(0, prefix.size).contentEquals(prefix)
 
     private fun sendFirmwareIfNeeded(printer: UsbPrinterManager.ConnectedPrinter): String? {
         if (firmwareSentThisConnection) return null
