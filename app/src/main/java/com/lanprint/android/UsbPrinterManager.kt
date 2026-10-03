@@ -11,12 +11,14 @@ import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbEndpoint
 import android.hardware.usb.UsbInterface
 import android.hardware.usb.UsbManager
+import android.util.Log
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
 class UsbPrinterManager(private val context: Context) {
 
     companion object {
+        private const val TAG = "FirmwareUpload"
         private const val ACTION_USB_PERMISSION = "com.lanprint.android.USB_PERMISSION"
         private const val CONTROL_TIMEOUT_MS = 3000
         private const val BULK_TIMEOUT_MS = 15000
@@ -139,10 +141,15 @@ class UsbPrinterManager(private val context: Context) {
             buffer.size,
             CONTROL_TIMEOUT_MS
         )
-        if (read < 2) return null
+        if (read < 2) {
+            Log.i(TAG, "GET_DEVICE_ID interface=${iface.id} returned $read bytes")
+            return null
+        }
         val declaredLen = ((buffer[0].toInt() and 0xFF) shl 8) or (buffer[1].toInt() and 0xFF)
         val stringLen = (declaredLen - 2).coerceIn(0, read - 2)
-        return String(buffer, 2, stringLen, Charsets.US_ASCII)
+        return String(buffer, 2, stringLen, Charsets.US_ASCII).also {
+            Log.i(TAG, "GET_DEVICE_ID interface=${iface.id}: $it")
+        }
     }
 
     /** Sends [data] to the printer's bulk OUT endpoint, chunked to a safe transfer size. */
@@ -186,10 +193,22 @@ class UsbPrinterManager(private val context: Context) {
     }
 
     fun sendFirmware(printer: ConnectedPrinter, firmwareBytes: ByteArray): FirmwareSendResult {
+        val header = firmwareBytes.take(8).joinToString("") {
+            (it.toInt() and 0xFF).toString(16).padStart(2, '0')
+        }
+        Log.i(
+            TAG,
+            "Starting upload model=${printer.model.displayName} protocol=${printer.model.protocol} " +
+                "usb=${printer.device.vendorId.toString(16)}:${printer.device.productId.toString(16)} " +
+                "interface=${printer.usbInterface.id} endpoint=${printer.outEndpoint.address} " +
+                "bytes=${firmwareBytes.size} header=$header",
+        )
         val bytesTransferred = transferBytes(printer, firmwareBytes)
         if (bytesTransferred != firmwareBytes.size || firmwareBytes.isEmpty()) {
+            Log.e(TAG, "Upload stopped after $bytesTransferred/${firmwareBytes.size} bytes")
             return FirmwareSendResult(bytesTransferred, firmwareBytes.size, null)
         }
+        Log.i(TAG, "USB bulk transfer completed: $bytesTransferred bytes")
 
         try {
             Thread.sleep(FIRMWARE_SETTLE_DELAY_MS)
@@ -211,6 +230,7 @@ class UsbPrinterManager(private val context: Context) {
                 }
             }
         }
+        Log.i(TAG, "Post-upload printer device ID: ${deviceId ?: "<unavailable>"}")
         return FirmwareSendResult(bytesTransferred, firmwareBytes.size, deviceId)
     }
 

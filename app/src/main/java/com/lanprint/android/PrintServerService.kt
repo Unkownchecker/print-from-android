@@ -18,6 +18,7 @@ import android.hardware.usb.UsbManager
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -36,6 +37,7 @@ class PrintServerService : Service(), PrinterBackend {
         const val KEY_RELAY_URL = "relay_url"
         const val KEY_PAIRING_ID = "pairing_id"
         private const val ID_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" // no ambiguous chars
+        private const val FIRMWARE_TAG = "FirmwareUpload"
 
         fun generateId(): String {
             val random = SecureRandom()
@@ -96,9 +98,15 @@ class PrintServerService : Service(), PrinterBackend {
         val model = connectedPrinter?.model ?: return "Connect a printer first, then load its firmware."
 
         val dlFile = firmwareFile(model)
+        Log.i(
+            FIRMWARE_TAG,
+            "Selected firmware for ${model.displayName}/${model.firmwareModelName}: " +
+                "${bytes.size} bytes, header=${hexPrefix(bytes)}",
+        )
 
         if (isHpDownloadFile(bytes)) {
             dlFile.writeBytes(bytes)
+            Log.i(FIRMWARE_TAG, "Input is already HP .dl format")
         } else {
             val workDir = File(cacheDir, "firmware-work").apply { mkdirs() }
             val rawFile = File(workDir, "raw-${System.currentTimeMillis()}.img")
@@ -108,11 +116,22 @@ class PrintServerService : Service(), PrinterBackend {
             } finally {
                 rawFile.delete()
             }
+            Log.i(
+                FIRMWARE_TAG,
+                "arm2hpdl conversion returned $rc; output=${dlFile.length()} bytes, " +
+                    "header=${if (dlFile.exists()) hexPrefix(dlFile.readBytes()) else "<missing>"}",
+            )
 
             if (rc != 0) {
                 dlFile.delete()
                 return "Firmware conversion failed (exit code $rc) — is this the right file for ${model.firmwareModelName}?"
             }
+        }
+
+        if (!dlFile.exists() || !isHpDownloadFile(dlFile.readBytes())) {
+            dlFile.delete()
+            Log.e(FIRMWARE_TAG, "Rejected firmware: output is empty or missing the HP download header")
+            return "Firmware file is invalid: expected an HP .dl file or a raw .img for ${model.firmwareModelName}."
         }
 
         val printer = connectedPrinter
@@ -159,10 +178,15 @@ class PrintServerService : Service(), PrinterBackend {
         firmwareStatus = if (result.firmwareReported) {
             "Firmware data sent; printer reports ${result.printerDeviceId}"
         } else {
-            "Firmware data transferred (${result.bytesTransferred} bytes); printer acceptance unconfirmed"
+            "USB transfer completed (${result.bytesTransferred} bytes), but the printer did not report FWVER; firmware activation is unverified"
         }
+        Log.i(FIRMWARE_TAG, "Upload status: $firmwareStatus")
         onUsbStatusUpdate?.invoke("Connected: ${printer.model.displayName} — $firmwareStatus")
         return null
+    }
+
+    private fun hexPrefix(bytes: ByteArray): String = bytes.take(8).joinToString("") {
+        (it.toInt() and 0xFF).toString(16).padStart(2, '0')
     }
 
     fun setRelayUrl(url: String) {

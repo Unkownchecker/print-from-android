@@ -57,9 +57,10 @@ class MainActivity : AppCompatActivity() {
                         service?.installFirmwareFile(bytes)
                     }
                     if (error == null) {
+                        val status = service?.getFirmwareStatus() ?: "USB transfer completed"
                         Toast.makeText(
                             this@MainActivity,
-                            "Firmware data sent; printer acceptance is unconfirmed",
+                            status,
                             Toast.LENGTH_LONG
                         ).show()
                     } else {
