@@ -1,9 +1,8 @@
 # LAN Print for Android
 
 Turns an Android phone with a USB-OTG cable into a print server for an
-HP LaserJet P1005 / P1006 / P1007 / P1008 / P1505 / P1505n, **or** a plain
-HP LaserJet 1020 (including the "Plus" revision, with one caveat noted
-below) — the same role the Windows desktop app plays, but driving the
+HP LaserJet P1005 / P1006 / P1007 / P1008 / P1505 / P1505n, **or** an
+HP LaserJet 1020 / 1020 Plus — the same role the Windows desktop app plays, but driving the
 printer directly over USB instead of through a PC. Talks to the same relay
 server and pairing-ID system as the desktop app and phone web app, so
 nothing else in your setup needs to change.
@@ -15,13 +14,11 @@ your exact model, but it's worth knowing they're not the same thing
 wearing a different hat, in case something works for one family and not
 the other.
 
-**1020 Plus caveat:** the exact USB Product ID this app uses for "1020" is
-confirmed from foo2zjs's own hotplug script, but that's documented for the
-plain 1020 — I haven't independently confirmed whether the "Plus" revision
-uses the identical ID or a different one. If the app doesn't recognize your
-1020 Plus by ID, it still falls back to checking the printer's own reported
-name string, which should catch it either way — if that also fails, let me
-know what USB ID / device string it reports and I'll add it properly.
+**Protocol selection:** P1007 is sent through the XQX converter and uses
+the P1005 firmware. The 1020 and 1020 Plus are sent through the
+Zenographics ZJ-stream converter (`foo2zjs`) and use the 1020 firmware.
+The 1020 profile matches USB ID `03F0:2B17` or a reported device name
+containing `1020`.
 
 ## Before you start: get the printer's firmware file
 

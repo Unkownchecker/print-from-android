@@ -33,11 +33,8 @@ data class PrinterModel(
 // directly from foo2zjs's hplj1000 hotplug script -- do not renumber these
 // from guesswork.
 //
-// ZJS-family models (LaserJet 1000/1005/1018/1020/1022): a genuinely
-// different wire protocol (Zenographics ZJ-stream, via foo2zjs.c), not
-// just a different flag on the same one. Only the plain "1020" is wired up
-// below (that's what was asked for) -- 1000/1005/1018/1022 use the same
-// driver and are very likely addable the same way if needed later.
+// ZJS-family models use the Zenographics ZJ-stream protocol via foo2zjs.c.
+// The 1020 Plus is matched to the same 1020 profile by USB ID or device name.
 val SUPPORTED_MODELS = listOf(
     PrinterModel("HP LaserJet P1005", "P1005", 0x3d17, "P1005", PrinterProtocol.XQX),
     PrinterModel("HP LaserJet P1006", "P1006", 0x3e17, "P1006", PrinterProtocol.XQX),
@@ -45,12 +42,8 @@ val SUPPORTED_MODELS = listOf(
     PrinterModel("HP LaserJet P1008", "P1008", 0x4917, "P1006", PrinterProtocol.XQX), // alias!
     PrinterModel("HP LaserJet P1505", "P1505", 0x3f17, "P1505", PrinterProtocol.XQX),
     PrinterModel("HP LaserJet P1505n", "P1505", 0x4017, "P1505n", PrinterProtocol.XQX),
-    // PID 0x2b17 is documented for plain "1020"; HP's "1020 Plus" revision
-    // may or may not share this exact PID -- not independently confirmed.
-    // The IEEE-1284 device-ID-string fallback match (matchModelByDeviceId)
-    // will still identify it correctly even if this PID doesn't match.
     PrinterModel(
-        "HP LaserJet 1020", "1020", 0x2b17, "1020", PrinterProtocol.ZJS,
+        "HP LaserJet 1020 / 1020 Plus", "1020", 0x2b17, "1020", PrinterProtocol.ZJS,
         zjsExtraArgs = listOf("-z1", "-P", "-L0"),
     ),
 )
