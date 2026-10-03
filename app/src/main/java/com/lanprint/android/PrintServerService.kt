@@ -178,7 +178,7 @@ class PrintServerService : Service(), PrinterBackend {
         firmwareStatus = if (result.firmwareReported) {
             "Firmware data sent; printer reports ${result.printerDeviceId}"
         } else {
-            "USB transfer completed (${result.bytesTransferred} bytes), but the printer did not report FWVER; firmware activation is unverified"
+            "Firmware data sent to printer (${result.bytesTransferred} bytes). No FWVER response; try a test print to confirm readiness."
         }
         Log.i(FIRMWARE_TAG, "Upload status: $firmwareStatus")
         onUsbStatusUpdate?.invoke("Connected: ${printer.model.displayName} — $firmwareStatus")

@@ -68,6 +68,11 @@ You'll need to reload it any time the printer loses power (unplugged,
 turned off, etc.) — the app tracks this per-connection and will tell you if
 firmware hasn't been sent yet.
 
+If the app says it received no `FWVER` response, that does **not** mean the
+firmware file was rejected: it means the printer did not provide its optional
+firmware-version string over USB. The app still allows printing after a full
+USB transfer; send a small test page to check whether the printer is ready.
+
 ## Building the APK (via GitHub Actions — no Android Studio needed)
 
 1. Create a new GitHub repository and push this entire folder to it.
