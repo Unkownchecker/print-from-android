@@ -54,8 +54,11 @@ through this app's firmware loader, byte-for-byte against the original
 
 Then, in the app, plug in your printer, wait for it to connect, and tap
 **"Load printer firmware file"** to pick either the raw `.img` file or an
-already converted `.dl` file. Raw images are converted by the app using
-foo2zjs's `arm2hpdl` tool; `.dl` files are sent as-is.
+already converted `.dl` file. For an HP LaserJet 1020 / 1020 Plus, the
+NokoPrint data package contains `sihp1020.dl`; select that file directly
+(copy it to the phone's Downloads folder first if it is on a computer).
+This `.dl` file is already in HP's PJL/ACL download format and is sent as-is.
+Raw images are converted by the app using foo2zjs's `arm2hpdl` tool.
 
 **P1505n note:** that mirror only has a plain `sihpP1505.img`, not a
 separate `sihpP1505n.img` that the driver's own scripts expect for that

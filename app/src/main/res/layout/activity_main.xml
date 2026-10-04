@@ -41,6 +41,14 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Load printer firmware file"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="HP LaserJet 1020 / 1020 Plus: select NokoPrint's sihp1020.dl file. If it is on a computer, copy it to your phone first. The P1007 uses sihpP1005.dl."
+            android:textColor="@color/inkSoft"
+            android:textSize="12sp"
             android:layout_marginBottom="20dp" />
 
         <!-- Print from anywhere card -->
